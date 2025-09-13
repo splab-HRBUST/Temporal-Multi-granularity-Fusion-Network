@@ -14,17 +14,16 @@ $: python evaluate.py score.txt ./keys eval
 
 import sys, os.path
 import numpy as np
-import pandas
+import pandas as pd
 import eval_metric_LA as em
 from glob import glob
-
 if len(sys.argv) != 4:
     print("CHECK: invalid input arguments. Please read the instruction below:")
     print(__doc__)
     exit(1)
 
-submit_file = sys.argv[1]
-truth_dir = sys.argv[2]
+submit_file = sys[1]    #所生成的得分
+truth_dir = sys.argv[2]   #答案
 phase = sys.argv[3]
 
 asv_key_file = os.path.join(truth_dir, 'ASV/trial_metadata.txt')
@@ -34,19 +33,22 @@ cm_key_file = os.path.join(truth_dir, 'CM/trial_metadata.txt')
 
 Pspoof = 0.05
 cost_model = {
-    'Pspoof': Pspoof,  # Prior probability of a spoofing attack
-    'Ptar': (1 - Pspoof) * 0.99,  # Prior probability of target speaker
-    'Pnon': (1 - Pspoof) * 0.01,  # Prior probability of nontarget speaker
-    'Cmiss': 1,  # Cost of tandem system falsely rejecting target speaker
-    'Cfa': 10,  # Cost of tandem system falsely accepting nontarget speaker
-    'Cfa_spoof': 10,  # Cost of tandem system falsely accepting spoof
+    'Pspoof': Pspoof,  # Prior probability of a spoofing attack 伪冒攻击的先验概率
+    'Ptar': (1 - Pspoof) * 0.99,  # Prior probability of target speaker 目标说话人的先验概率
+    'Pnon': (1 - Pspoof) * 0.01,  # Prior probability of nontarget speaker 非目标说话人的先验概率
+    'Cmiss': 1,  # Cost of tandem system falsely rejecting target speaker 拒绝目标说话人的成本
+    'Cfa': 10,  # Cost of tandem system falsely accepting nontarget speaker 接受非目标说话人的成本
+    'Cfa_spoof': 10,  # Cost of tandem system falsely accepting spoof 接受伪冒攻击的成本
 }
 
 
 def load_asv_metrics():
     # Load organizers' ASV scores
-    asv_key_data = pandas.read_csv(asv_key_file, sep=' ', header=None)
-    asv_scr_data = pandas.read_csv(asv_scr_file, sep=' ', header=None)[asv_key_data[7] == phase]
+
+    asv_key_data = pd.read_csv(asv_key_file, sep=' ', header=None)
+    asv_scr_data = pd.read_csv(asv_scr_file, sep=' ', header=None)[asv_key_data[7] == phase]
+
+    
     idx_tar = asv_key_data[asv_key_data[7] == phase][5] == 'target'
     idx_non = asv_key_data[asv_key_data[7] == phase][5] == 'nontarget'
     idx_spoof = asv_key_data[asv_key_data[7] == phase][5] == 'spoof'
@@ -59,7 +61,10 @@ def load_asv_metrics():
     [Pfa_asv, Pmiss_asv, Pmiss_spoof_asv, Pfa_spoof_asv] = em.obtain_asv_error_rates(tar_asv, non_asv, spoof_asv, asv_threshold)
 
     return Pfa_asv, Pmiss_asv, Pmiss_spoof_asv, Pfa_spoof_asv
-
+#Pfa_asv目标说话人的错误接受率
+#Pmiss_asv目标说话人的错误拒绝率
+#Pmiss_spoof_asv伪冒攻击的错误拒绝率
+#Pfa_spoof_asv伪冒攻击的错误接受率
 
 def performance(cm_scores, Pfa_asv, Pmiss_asv, Pfa_spoof_asv, invert=False):
     bona_cm = cm_scores[cm_scores[5]=='bonafide']['1_x'].values
@@ -83,14 +88,12 @@ def performance(cm_scores, Pfa_asv, Pmiss_asv, Pfa_spoof_asv, invert=False):
 
 def eval_to_score_file(score_file, cm_key_file):
     Pfa_asv, Pmiss_asv, Pmiss_spoof_asv, Pfa_spoof_asv = load_asv_metrics()
-    cm_data = pandas.read_csv(cm_key_file, sep=' ', header=None)
-    submission_scores = pandas.read_csv(score_file, sep=' ', header=None, skipinitialspace=True)
-
+    cm_data = pd.read_csv(cm_key_file, sep=' ', header=None)
+    submission_scores = pd.read_csv(score_file, sep=' ', header=None, skipinitialspace=True, error_bad_lines=False)
     if len(submission_scores) != len(cm_data):
         print('CHECK: submission has %d of %d expected trials.' % (len(submission_scores), len(cm_data)))
-        exit(1)
-
-    # check here for progress vs eval set
+        exit(1) 
+        # check here for progress vs eval set
     cm_scores = submission_scores.merge(cm_data[cm_data[7] == phase], left_on=0, right_on=1, how='inner')
     min_tDCF, eer_cm = performance(cm_scores, Pfa_asv, Pmiss_asv, Pfa_spoof_asv)
 
@@ -98,7 +101,8 @@ def eval_to_score_file(score_file, cm_key_file):
     out_data += "eer: %.2f\n" % (100*eer_cm)
     print(out_data, end="")
 
-    # just in case that the submitted file reverses the sign of positive and negative scores
+
+        # just in case that the submitted file reverses the sign of positive and negative scores
     min_tDCF2, eer_cm2 = performance(cm_scores, Pfa_asv, Pmiss_asv, Pfa_spoof_asv, invert=True)
 
     if min_tDCF2 < min_tDCF:
@@ -109,8 +113,11 @@ def eval_to_score_file(score_file, cm_key_file):
     if min_tDCF == min_tDCF2:
         print(
             'WARNING: your classifier might not work correctly, we checked if negating your scores gives different min t-DCF - it does not. Are all values the same?')
-
     return min_tDCF
+    
+
+
+    
 
 
 if __name__ == "__main__":
